@@ -44,9 +44,7 @@ const CanvasComponent: React.FC = () => {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 ctx.save();
-                if (zoom > 1) {
-                    ctx.translate(offset.x, offset.y);
-                }
+                ctx.translate(offset.x, offset.y);
                 ctx.scale(zoom, zoom);
                 ctx.strokeStyle = '#00f';
                 ctx.lineWidth = 0.4;
@@ -135,9 +133,13 @@ const CanvasComponent: React.FC = () => {
             const mouseX = (event.clientX - canvasBounds.left - offset.x) / zoom;
             const mouseY = (event.clientY - canvasBounds.top - offset.y) / zoom;
 
-            const foundVertex = Object.values(graph).find(vertex =>
+            const foundVertex = Object.values(graph).find((vertex) => {
                 Math.abs(vertex.getX() - mouseX) < 5 && Math.abs(vertex.getY() - mouseY) < 5
-            );
+                const distance = Math.sqrt(
+                    Math.pow(mouseX - vertex.getX(), 2) + Math.pow(mouseY - vertex.getY(), 2)
+                )
+                return distance < 5;
+            });
 
             if (foundVertex) {
                 setHoveredVertex(foundVertex);  // Guardar el vértice hovered
@@ -179,6 +181,7 @@ const CanvasComponent: React.FC = () => {
             {tooltip && tooltip.vertex && (
                 <div style={{
                     position: 'absolute',
+                    zIndex: '1',
                     left: tooltip.x + 10,
                     top: tooltip.y + 10,
                     backgroundColor: 'rgba(0, 0, 0, 0.8)',
