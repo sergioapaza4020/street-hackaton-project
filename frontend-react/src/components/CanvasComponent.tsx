@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import json from '../utils/Potosi.json';
+import getCanvas from '../utils/canvas/canvas';
 import Vertex from '../utils/graphs/Vertex';
 import { calculateDistance, drawCircle, getVertex } from '../utils/utils';
 
@@ -8,13 +9,12 @@ const positionX = 500;
 const positionY = 450;
 let integerX: any = null;
 let integerY: any = null;
+const scaleX = (lon: number) => (lon + 180) * (getCanvas().width / 360) * totalScale;
+const scaleY = (lat: number) => (90 - lat) * (getCanvas().height / 180) * totalScale;
 
-const scaleX = (lon: number, canvasWidth: number) => (lon + 180) * (canvasWidth / 360) * totalScale;
-const scaleY = (lat: number, canvasHeight: number) => (90 - lat) * (canvasHeight / 180) * totalScale;
-
-function transFormPoint(firstCoord: number, secondCoord: number, canvasWidth: number, canvasHeight: number) {
-    const coorsX = scaleX(firstCoord, canvasWidth);
-    const coorsY = scaleY(secondCoord, canvasHeight);
+function transFormPoint(firstCoord: number, secondCoord: number) {
+    const coorsX = scaleX(firstCoord);
+    const coorsY = scaleY(secondCoord);
     if (integerX == null && integerY == null) {
         integerX = Math.floor(coorsX);
         integerY = Math.floor(coorsY);
@@ -30,20 +30,17 @@ const CanvasComponent: React.FC = () => {
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const [offset, setOffset] = useState({ x: 0, y: 0 });
-    const [selectedVertex, setSelectedVertex] = useState<{ x: number, y: number } | null>(null);
-    const [isHoveringVertex, setIsHoveringVertex] = useState(false);
+    const [selectedVertex, setSelectedVertex] = useState<Vertex | null>(null);
     const [hoveredVertex, setHoveredVertex] = useState<Vertex | null>(null);
-
+    const [tooltip, setTooltip] = useState<{ x: number, y: number, vertex: Vertex | null } | null>(null);
     const graph: Record<string, Vertex> = {};
 
-    useEffect(() => {
+    // Función para dibujar el canvas
+    const drawCanvas = () => {
         const canvas = canvasRef.current;
         if (canvas) {
             const ctx = canvas.getContext('2d');
             if (ctx) {
-                const canvasWidth = canvas.width || 1024;
-                const canvasHeight = canvas.height || 720;
-
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 ctx.save();
@@ -53,41 +50,44 @@ const CanvasComponent: React.FC = () => {
                 ctx.scale(zoom, zoom);
                 ctx.strokeStyle = '#00f';
                 ctx.lineWidth = 0.4;
+
+                // Vinculamos las propiedades del JSON a los vértices
                 json.features.forEach((feature: any) => {
                     if (feature.geometry.type === 'LineString') {
                         ctx.beginPath();
                         feature.geometry.coordinates.forEach((line: number[], index: number) => {
                             const [firstCoord, secondCoord] = line;
-                            const { x, y } = transFormPoint(firstCoord, secondCoord, canvasWidth, canvasHeight);
+                            const { x, y } = transFormPoint(firstCoord, secondCoord);
                             if (index === 0) {
                                 ctx.moveTo(x, y);
                             } else {
                                 ctx.lineTo(x, y);
                             }
-
-                            if (selectedVertex && Math.abs(selectedVertex.x - x) < 5 && Math.abs(selectedVertex.y - y) < 5) {
-                                if (selectedVertex === hoveredVertex) {
-                                    ctx.fillStyle = '#0f0';
-                                }
-                                ctx.fillStyle = '#f00';
-                                drawCircle(x, y, 2.5);
-                            } else {
-                                ctx.fillStyle = '#00f';
-                                drawCircle(x, y, 1);
-                            }
-
+                            // Cambiar el color según el estado
                             const vertex = getVertex(graph, x, y);
+                            if (vertex === hoveredVertex) {
+                                ctx.fillStyle = 'green';  // Vértice hovered
+                            } else if (vertex === selectedVertex) {
+                                ctx.fillStyle = 'red';  // Vértice seleccionado
+                            } else {
+                                ctx.fillStyle = 'blue';  // Vértice normal
+                            }
+                            drawCircle(x, y, 1);
+
+                            // Asignamos las propiedades del JSON al vértice
+                            vertex?.setProperties(feature.properties);
+
                             if (index + 1 < feature.geometry.coordinates.length) {
                                 const next = feature.geometry.coordinates[index + 1];
-                                const [nextFirstCoord, nextSecondCoord] = next;
-                                const { x: x2, y: y2 } = transFormPoint(nextFirstCoord, nextSecondCoord, canvasWidth, canvasHeight);
+                                const [firstCoord, secondCoord] = next;
+                                const { x: x2, y: y2 } = transFormPoint(firstCoord, secondCoord);
                                 const nextVertex = getVertex(graph, x2, y2);
                                 vertex?.addNeighbor(nextVertex, calculateDistance({ x, y }, { x: x2, y: y2 }));
                             }
                             if (index > 0) {
                                 const prev = feature.geometry.coordinates[index - 1];
-                                const [prevFirstCoord, prevSecondCoord] = prev;
-                                const { x: x2, y: y2 } = transFormPoint(prevFirstCoord, prevSecondCoord, canvasWidth, canvasHeight);
+                                const [firstCoord, secondCoord] = prev;
+                                const { x: x2, y: y2 } = transFormPoint(firstCoord, secondCoord);
                                 const prevVertex = getVertex(graph, x2, y2);
                                 vertex?.addNeighbor(prevVertex, calculateDistance({ x, y }, { x: x2, y: y2 }));
                             }
@@ -98,32 +98,15 @@ const CanvasComponent: React.FC = () => {
                 ctx.restore();
             }
         }
-    }, [zoom, offset, selectedVertex]);
+    };
+
+    useEffect(() => {
+        drawCanvas();
+    }, [zoom, offset, hoveredVertex, selectedVertex]);
 
     const handleZoomChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         setZoom(parseFloat(event.target.value));
     };
-
-    // const handleMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    //     const canvas = canvasRef.current;
-    //     if (canvas) {
-    //         const canvasBounds = canvas.getBoundingClientRect();
-
-    //         const mouseX = (event.clientX - canvasBounds.left - offset.x) / zoom;
-    //         const mouseY = (event.clientY - canvasBounds.top - offset.y) / zoom;
-
-    //         const foundVertex = Object.values(graph).find(vertex =>
-    //             Math.abs(vertex.x - mouseX) < 5 && Math.abs(vertex.y - mouseY) < 5
-    //         );
-
-    //         if (foundVertex) {
-    //             setSelectedVertex({ x: foundVertex.x, y: foundVertex.y });
-    //         } else {
-    //             setSelectedVertex(null);
-    //         }
-    //     }
-    //     console.log(graph)
-    // };
 
     const handleMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
         setIsDragging(true);
@@ -131,100 +114,21 @@ const CanvasComponent: React.FC = () => {
             x: event.clientX - offset.x,
             y: event.clientY - offset.y,
         });
-
-        const canvas = canvasRef.current;
-        if (canvas) {
-            const canvasBounds = canvas.getBoundingClientRect();
-
-            const clickX = (event.clientX - canvasBounds.left - offset.x) / zoom;
-            const clickY = (event.clientY - canvasBounds.top - offset.y) / zoom;
-
-            const foundVertex = Object.values(graph).find(vertex =>
-                Math.abs(vertex.x - clickX) < 5 && Math.abs(vertex.y - clickY) < 5
-            );
-
-            if (foundVertex) {
-                setSelectedVertex({ x: foundVertex.x, y: foundVertex.y });
-            } else {
-                setSelectedVertex(null);
-            }
-        }
-        console.log(graph)
     };
-
-    // const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    //     if (isDragging) {
-    //         const canvas = canvasRef.current;
-    //         if (canvas) {
-    //             const canvasWidth = canvas.width || 1024;
-    //             const canvasHeight = canvas.height || 720;
-
-    //             let newOffsetX = event.clientX - dragStart.x;
-    //             let newOffsetY = event.clientY - dragStart.y;
-
-    //             const maxOffsetX = canvasWidth * (zoom - 1);
-    //             const maxOffsetY = canvasHeight * (zoom - 1);
-
-    //             if (newOffsetX > 0) newOffsetX = 0;
-    //             if (newOffsetX < -maxOffsetX) newOffsetX = -maxOffsetX;
-
-    //             if (newOffsetY > 0) newOffsetY = 0;
-    //             if (newOffsetY < -maxOffsetY) newOffsetY = -maxOffsetY;
-
-    //             setOffset({
-    //                 x: newOffsetX,
-    //                 y: newOffsetY,
-    //             });
-    //         }
-    //     }
-
-    //     Detectar si el mouse está sobre un vértice
-    //     const canvas = canvasRef.current;
-    //     if (canvas) {
-    //         const canvasBounds = canvas.getBoundingClientRect();
-    //         Obtener las coordenadas del mouse dentro del canvas teniendo en cuenta el zoom y el offset
-    //         const mouseX = (event.clientX - canvasBounds.left - offset.x) / zoom;
-    //         const mouseY = (event.clientY - canvasBounds.top - offset.y) / zoom;
-
-    //         Verificar si el mouse está cerca de algún vértice
-    //         const foundVertex = Object.values(graph).find(vertex =>
-    //             Math.abs(vertex.x - mouseX) < 5 && Math.abs(vertex.y - mouseY) < 5
-    //         );
-
-    //         if (foundVertex) {
-    //             setIsHoveringVertex(true);
-    //         } else {
-    //             setIsHoveringVertex(false);
-    //         }
-    //     }
-    // };
 
     const handleMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
         if (isDragging) {
-            const canvas = canvasRef.current;
-            if (canvas) {
-                const canvasWidth = canvas.width || 1024;
-                const canvasHeight = canvas.height || 720;
+            let newOffsetX = event.clientX - dragStart.x;
+            let newOffsetY = event.clientY - dragStart.y;
 
-                let newOffsetX = event.clientX - dragStart.x;
-                let newOffsetY = event.clientY - dragStart.y;
+            // Aplicar límites en las 4 direcciones
+            newOffsetX = Math.min(Math.max(newOffsetX, -1000), 1000);  // Limite horizontal
+            newOffsetY = Math.min(Math.max(newOffsetY, -1000), 1000);  // Limite vertical
 
-                const maxOffsetX = canvasWidth * (zoom - 1);
-                const maxOffsetY = canvasHeight * (zoom - 1);
-
-                if (newOffsetX > 0) newOffsetX = 0;
-                if (newOffsetX < -maxOffsetX) newOffsetX = -maxOffsetX;
-
-                if (newOffsetY > 0) newOffsetY = 0;
-                if (newOffsetY < -maxOffsetY) newOffsetY = -maxOffsetY;
-
-                setOffset({
-                    x: newOffsetX,
-                    y: newOffsetY,
-                });
-            }
+            setOffset({ x: newOffsetX, y: newOffsetY });
         }
 
+        // Detectar si el mouse está sobre un vértice
         const canvas = canvasRef.current;
         if (canvas) {
             const canvasBounds = canvas.getBoundingClientRect();
@@ -232,19 +136,25 @@ const CanvasComponent: React.FC = () => {
             const mouseY = (event.clientY - canvasBounds.top - offset.y) / zoom;
 
             const foundVertex = Object.values(graph).find(vertex =>
-                Math.abs(vertex.x - mouseX) < 5 && Math.abs(vertex.y - mouseY) < 5
+                Math.abs(vertex.getX() - mouseX) < 5 && Math.abs(vertex.getY() - mouseY) < 5
             );
 
             if (foundVertex) {
-                setHoveredVertex(foundVertex);  // Guardar el vértice "hovered"
+                setHoveredVertex(foundVertex);  // Guardar el vértice hovered
+                setTooltip({ x: event.clientX, y: event.clientY, vertex: foundVertex });  // Mostrar tooltip con datos del vértice
             } else {
-                setHoveredVertex(null);  // No hay ningún vértice "hovered"
+                setHoveredVertex(null);
+                setTooltip(null);
             }
         }
     };
 
     const handleMouseUp = () => {
         setIsDragging(false);
+    };
+
+    const handleVertexClick = (vertex: Vertex) => {
+        setSelectedVertex(vertex);
     };
 
     return (
@@ -262,8 +172,25 @@ const CanvasComponent: React.FC = () => {
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
-                style={{ cursor: isDragging ? 'grabbing' : isHoveringVertex ? 'pointer' : 'grab' }}
+                style={{ cursor: isDragging ? 'grabbing' : hoveredVertex ? 'pointer' : 'grab' }}
             ></canvas>
+
+            {/* Tooltip que muestra las propiedades del vértice */}
+            {tooltip && tooltip.vertex && (
+                <div style={{
+                    position: 'absolute',
+                    left: tooltip.x + 10,
+                    top: tooltip.y + 10,
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    color: 'white',
+                    padding: '5px',
+                    borderRadius: '3px',
+                }}>
+                    <div><strong>Vértice:</strong> {tooltip.vertex.label}</div>
+                    <div><strong>Coordenadas:</strong> ({tooltip.vertex.getX()}, {tooltip.vertex.getY()})</div>
+                    <div><strong>Nombre:</strong> {tooltip.vertex.getProperties()?.name || 'No disponible'}</div>
+                </div>
+            )}
         </div>
     );
 };

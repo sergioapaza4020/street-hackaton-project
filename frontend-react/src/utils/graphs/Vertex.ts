@@ -8,10 +8,19 @@ class Vertex {
     x: number = 0;
     y: number = 0;
     canvas: HTMLCanvasElement;
+    properties: Record<string, any> | null = null;
     constructor(label: string) {
         this.label = label;
         this.canvas = getCanvas();
     }
+    setProperties(properties: Record<string, any>) {
+        this.properties = properties;
+    }
+
+    getProperties() {
+        return this.properties;
+    }
+
     setX(x: number) {
         this.x = x;
     }
