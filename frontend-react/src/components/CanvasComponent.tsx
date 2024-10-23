@@ -4,6 +4,8 @@ import getCanvas from '../utils/canvas/canvas';
 import Vertex from '../utils/graphs/Vertex';
 import { calculateDistance, drawCircle, getVertex } from '../utils/utils';
 
+import { dijkstra } from '../utils/algorithms/dijkstra';
+
 const totalScale = 4000;
 const positionX = 500;
 const positionY = 450;
@@ -35,12 +37,34 @@ const CanvasComponent: React.FC = () => {
     const [tooltip, setTooltip] = useState<{ x: number, y: number, vertex: Vertex | null } | null>(null);
     const graph: Record<string, Vertex> = {};
 
+    // apartado de funcionalidad con dijkstra ----------------------------------------------------------------
+    const [startVertex, setStartVertex] = useState<Vertex | null>(null);
+    const [endVertex, setEndVertex] = useState<Vertex | null>(null);
+    const [shortestPath, setShortestPath] = useState<Vertex[]>([]);
+
+    const handleFindShortestPath = () => {
+        if (startVertex && endVertex) {
+            const { path } = dijkstra(graph, startVertex, endVertex);
+            setShortestPath(path);
+        }
+    };
+
+    const handleSelectStart = (vertex: Vertex) => setStartVertex(vertex);
+    const handleSelectEnd = (vertex: Vertex) => setEndVertex(vertex);
+    // apartado de funcionalidad con dijkstra ----------------------------------------------------------------
+
+
     // Función para dibujar el canvas
     const drawCanvas = () => {
+        
         const canvas = canvasRef.current;
         if (canvas) {
             const ctx = canvas.getContext('2d');
+            
             if (ctx) {
+
+                
+
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 ctx.save();
@@ -95,6 +119,23 @@ const CanvasComponent: React.FC = () => {
                         ctx.stroke();
                     }
                 });
+
+                // Dibujar la ruta más corta
+                if (shortestPath.length > 1) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = 'green';
+                    ctx.lineWidth = 2;
+                    shortestPath.forEach((vertex, index) => {
+                        const { x, y } = transFormPoint(vertex.getX(), vertex.getY());
+                        if (index === 0) {
+                            ctx.moveTo(x, y);
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                    });
+                    ctx.stroke();
+                }
+
                 ctx.restore();
             }
         }
@@ -158,39 +199,34 @@ const CanvasComponent: React.FC = () => {
     };
 
     return (
-        <div className='canvas'>
+        <div className="canvas">
+            {/* Menú para seleccionar nodos */}
             <div>
-                <input id="zoomRange" type="range" min="1" max="5" step="0.1" value={zoom} onChange={handleZoomChange} />
-                <span> {zoom}x</span>
+                <label>Start Node: </label>
+                <select onChange={(e) => handleSelectStart(graph[e.target.value])}>
+                    <option value="">Select Start Node</option>
+                    {Object.values(graph).map((vertex) => (
+                        <option key={vertex.label} value={vertex.label}>
+                            {vertex.label}
+                        </option>
+                    ))}
+                </select>
+                <label>End Node: </label>
+                <select onChange={(e) => handleSelectEnd(graph[e.target.value])}>
+                    <option value="">Select End Node</option>
+                    {Object.values(graph).map((vertex) => (
+                        <option key={vertex.label} value={vertex.label}>
+                            {vertex.label}
+                        </option>
+                    ))}
+                </select>
+                <button onClick={handleFindShortestPath}>Find Shortest Path</button>
             </div>
-            <canvas
-                ref={canvasRef}
-                id="app"
-                width={1024}
-                height={720}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                style={{ cursor: isDragging ? 'grabbing' : hoveredVertex ? 'pointer' : 'grab' }}
-            ></canvas>
 
-            {/* Tooltip que muestra las propiedades del vértice */}
-            {tooltip && tooltip.vertex && (
-                <div style={{
-                    position: 'absolute',
-                    left: tooltip.x + 10,
-                    top: tooltip.y + 10,
-                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                    color: 'white',
-                    padding: '5px',
-                    borderRadius: '3px',
-                }}>
-                    <div><strong>Vértice:</strong> {tooltip.vertex.label}</div>
-                    <div><strong>Coordenadas:</strong> ({tooltip.vertex.getX()}, {tooltip.vertex.getY()})</div>
-                    <div><strong>Nombre:</strong> {tooltip.vertex.getProperties()?.name || 'No disponible'}</div>
-                </div>
-            )}
+            {/* Visualizar la ruta más corta */}
+            <canvas ref={canvasRef} id="app" width={1024} height={720} /* otros eventos aquí */>
+                {/* Dibujar el canvas */}
+            </canvas>
         </div>
     );
 };
