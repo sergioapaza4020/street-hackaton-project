@@ -120,8 +120,8 @@ const CanvasComponent: React.FC = () => {
             let newOffsetY = event.clientY - dragStart.y;
 
             // Aplicar límites en las 4 direcciones
-            newOffsetX = Math.min(Math.max(newOffsetX, -1000), 1000);  // Limite horizontal
-            newOffsetY = Math.min(Math.max(newOffsetY, -1000), 1000);  // Limite vertical
+            // newOffsetX = Math.min(Math.max(newOffsetX, -1000), 1000);  // Limite horizontal
+            // newOffsetY = Math.min(Math.max(newOffsetY, -1000), 1000);  // Limite vertical
 
             setOffset({ x: newOffsetX, y: newOffsetY });
         }
@@ -162,7 +162,7 @@ const CanvasComponent: React.FC = () => {
     return (
         <div className='canvas'>
             <div>
-                <input id="zoomRange" type="range" min="1" max="5" step="0.1" value={zoom} onChange={handleZoomChange} />
+                <input id="zoomRange" type="range" min="1" max="10" step="0.1" value={zoom} onChange={handleZoomChange} />
                 <span> {zoom}x</span>
             </div>
             <canvas
